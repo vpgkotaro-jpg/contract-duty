@@ -1,6 +1,6 @@
 import {
   addDays, fmt, weekdayName, isDate, lastSafeDay, firstReminder, schedule,
-  applyReply, applyProof, tick, fallbackReply, cancelSteps,
+  applyReply, applyProof, tick, fallbackReply, fallbackProof, cancelSteps,
 } from "./agent.js";
 
 const KEY = "keiyaku-touban-v1";
@@ -30,6 +30,7 @@ Hi! Your 1-month free trial of Melodia Premium has started.
 Your trial ends on ${long(addDays(t, 30))}. After that, your subscription renews automatically at ¥1,080/month.
 Billing is handled by Apple. You can manage or cancel your subscription in your Apple ID settings.
 Enjoy ad-free music!`,
+    saved: (t) => ({ is_contract: true, reason: "A 1-month free trial that renews at ¥1,080/month, billed by Apple.", service: "Melodia Premium", price: 1080, currency: "JPY", kind: "free_trial", trial_days: 30, end_date: addDays(t, 30), billed_by: "apple", cancel_url: "" }),
   },
   {
     label: "PDF tool · 3-day trial",
@@ -39,6 +40,7 @@ Subject: Your 3-day free trial is active
 Thanks for trying QuickPDF Pro. Your 3-day free trial ends ${long(addDays(t, 3))}.
 Unless you cancel before then, we'll charge your card $9.99 per month.
 Cancel anytime: https://quickpdf.example/account/billing`,
+    saved: (t) => ({ is_contract: true, reason: "A 3-day free trial that turns into $9.99/month unless cancelled.", service: "QuickPDF Pro", price: 9.99, currency: "USD", kind: "free_trial", trial_days: 3, end_date: addDays(t, 3), billed_by: "direct", cancel_url: "https://quickpdf.example/account/billing" }),
   },
   {
     label: "Promo (not a contract)",
@@ -47,6 +49,7 @@ Subject: 50% off FitNest Premium — this week only!
 
 New members get 50% off their first 3 months. Join today and start your fitness journey.
 Unsubscribe from marketing emails here.`,
+    saved: () => ({ is_contract: false, reason: "A marketing offer. You haven't signed up for anything.", service: "FitNest Premium", price: 0, currency: "", kind: "none", trial_days: 0, end_date: "", billed_by: "unknown", cancel_url: "" }),
   },
   {
     label: "Yearly renewal · Google Play",
@@ -55,12 +58,14 @@ Subject: Your subscription to CloudNotes Yearly will renew soon
 
 Your CloudNotes Yearly subscription will automatically renew on ${long(addDays(t, 40))} for ¥4,800/year.
 To cancel, open Google Play > Payments & subscriptions.`,
+    saved: (t) => ({ is_contract: true, reason: "A yearly plan that renews automatically at ¥4,800/year through Google Play.", service: "CloudNotes Yearly", price: 4800, currency: "JPY", kind: "yearly", trial_days: 0, end_date: addDays(t, 40), billed_by: "google_play", cancel_url: "" }),
   },
 ];
 
 // ---------- API ----------
 async function api(path, body) {
-  const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 20000);
+  const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: ctl.signal }).finally(() => clearTimeout(timer));
   const data = await r.json().catch(() => ({}));
   if (!r.ok || data.error) throw new Error(data.detail || data.error || `HTTP ${r.status}`);
   return data;
@@ -229,7 +234,14 @@ $("#readEmail").addEventListener("click", async () => {
   const btn = $("#readEmail"); busy(btn, true, "Read email");
   S.pending = null; renderPending();
   try {
-    S.pending = await api("/api/read-email", { text, today: S.today });
+    try { S.pending = await api("/api/read-email", { text, today: S.today }); }
+    catch (err) {
+      // If the AI is down or over its daily limit, the four samples still work from a saved reading.
+      const s = SAMPLES.find((x) => x.text(S.today).trim() === text);
+      if (!s) throw err;
+      S.pending = s.saved(S.today);
+      S.pending.reason = "AI unavailable right now, so this is the saved reading for this sample. " + S.pending.reason;
+    }
     if (S.pending.trial_days > 0 && /free trial|trial ends|trial period/i.test(text) && S.pending.kind !== "none") S.pending.kind = "free_trial";
   }
   catch (e) { S.pending = { error: e.message }; }
@@ -290,7 +302,9 @@ async function handleSend(text, forceKind) {
   btn.disabled = true;
   try {
     if (proofMode) {
-      const p = await api("/api/verify-proof", { text, contract: c });
+      let p;
+      try { p = await api("/api/verify-proof", { text, contract: c }); }
+      catch { p = fallbackProof(text, c); }
       const out = applyProof(c, p);
       replace(out.contract); say(c.id, "agent", out.say, out.contract.status === "closed" ? "closed" : "not yet"); log(c.id, out.log);
     } else {

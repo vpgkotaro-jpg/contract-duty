@@ -236,3 +236,13 @@ export function fallbackReply(text) {
   }
   return r;
 }
+
+// Offline proof check: only clear cases pass. "Renews on…" or no cancellation wording → not verified.
+export function fallbackProof(text, c) {
+  const t = text.toLowerCase();
+  const name = String(c.service || "").toLowerCase().split(/\s+/)[0] || "";
+  const cancelled = /(has been cancel+ed|was cancel+ed|cancel+ation (is )?confirmed|subscription (has )?(ended|cancel+ed)|will not renew|won't renew|auto-renew(al)? (is )?off)/.test(t);
+  const renews = /(renews on|renews \w+ \d|next (billing|payment|charge))/.test(t);
+  const same = !name || t.includes(name);
+  return { verified: cancelled && !renews, service_matches: same, reason: "Checked with offline rules because the AI is unavailable.", fallback: true };
+}

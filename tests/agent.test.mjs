@@ -29,3 +29,16 @@ t("no reply -> follow-up next morning", () => {
 });
 t("missed after end date", () => { const r = tick([{ ...apple }], "2026-12-02"); assert.equal(r.contracts[0].status, "missed"); });
 console.log(`${n} tests passed`);
+
+// offline proof fallback
+{
+  const { fallbackProof } = await import("../public/agent.js");
+  const c = { service: "QuickPDF Pro" };
+  const ok = fallbackProof("QuickPDF: Your subscription has been cancelled. You won't be charged again.", c);
+  const bad = fallbackProof("QuickPDF Pro — Monthly. Renews on Nov 18.", c);
+  const other = fallbackProof("Melodia: your subscription has been cancelled.", c);
+  if (!(ok.verified && ok.service_matches)) throw new Error("fallbackProof: real proof rejected");
+  if (bad.verified) throw new Error("fallbackProof: renewing screen accepted");
+  if (other.service_matches) throw new Error("fallbackProof: other service matched");
+  console.log("ok  - offline proof check: accepts cancellation, rejects 'Renews on', rejects other service");
+}

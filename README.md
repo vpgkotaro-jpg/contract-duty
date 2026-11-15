@@ -41,7 +41,7 @@ The model never picks a date and never closes a case by itself. Every decision i
 - `src/worker.js` — Cloudflare Worker. Three endpoints (`/api/read-email`, `/api/read-reply`, `/api/verify-proof`), each a Workers AI call with a JSON schema so the model returns structured fields only.
 - `public/agent.js` — deterministic agent logic: schedule, date resolution, state changes. Shared by the browser and the tests.
 - `public/app.js`, `index.html`, `style.css` — vanilla JS UI. No framework, no build step.
-- `tests/agent.test.mjs` — 18 tests (weekend/weekday rules, Apple's last safe day, "claim ≠ proof", follow-up after no reply, missed deadline). Run: `node tests/agent.test.mjs`.
+- `tests/agent.test.mjs` — 19 tests (offline proof check, weekend/weekday rules, Apple's last safe day, "claim ≠ proof", follow-up after no reply, missed deadline). Run: `node tests/agent.test.mjs`.
 
 Run locally: `npx wrangler dev` (needs a Cloudflare account for Workers AI). Deploy: `npx wrangler deploy`.
 
@@ -55,6 +55,7 @@ Contracts and conversations are stored only in your browser (localStorage). Text
 - It doesn't connect to Gmail or send push notifications yet: you paste emails and use the demo clock. Email forwarding and LINE/push notifications are the next step.
 - Not tested with real users yet.
 - The model can misread an email, which is why you confirm the fields before saving.
+- If Workers AI is unavailable (for example the free daily limit), the four sample emails fall back to a saved reading, replies and proof fall back to simple offline rules, and the log says so.
 
 ## Background and AI disclosure
 
