@@ -4,6 +4,8 @@
 
 Live demo: https://contract-duty.furatto-island.workers.dev
 
+Demo video: https://youtu.be/Eyiqz_24FQ4
+
 Reminder apps tell you a free trial ends on a date. Then you see the notification, think "later", and pay anyway. Contract Duty is built for the "later":
 
 1. **Paste a subscription email.** The AI tells a real contract (free trial, auto-renewal) from a marketing email, and reads the service, price, end date and *who bills you* (Apple, Google Play, or the company itself). You check the fields before anything is saved.
