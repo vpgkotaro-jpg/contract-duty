@@ -63,8 +63,8 @@ export function schedule(c, today) {
     if (!items.has(date)) items.set(date, why);
   };
   if (c.user_date) put(c.user_date, "the day you said");
-  else put(c.first_date, "first reminder — " + firstReminderRule(c, c.created));
-  if (c.last_nudge && !c.replied_since && addDays(c.last_nudge, 1) >= today) put(addDays(c.last_nudge, 1), "no reply yet — next morning");
+  else put(c.first_date, "first reminder: " + (c.first_note || firstReminderRule(c, c.created)));
+  if (c.last_nudge && !c.replied_since && addDays(c.last_nudge, 1) >= today) put(addDays(c.last_nudge, 1), "no reply yet, asking again");
   put(addDays(c.end_date, -3), "3 days before the end");
   if (c.billed_by === "apple") put(last, "last safe day for Apple (24h rule)");
   else {
@@ -125,7 +125,7 @@ export function cancelSteps(c) {
       url: c.cancel_url || "",
     };
   return {
-    where: "unknown — check who charges you first",
+    where: "unknown. Check who charges you first",
     steps: ["Look at the receipt sender or your card statement", "If it says Apple or Google Play, cancel there", "Otherwise cancel on the service's account page"],
     url: c.cancel_url || "",
   };
@@ -152,7 +152,7 @@ export function applyReply(c0, r, today) {
       c.status = "chasing";
       if (w.date > last) {
         c.user_date = last;
-        say = `${fmt(w.date)} is after your last safe day (${fmt(last)}). I'll remind you on ${fmt(last)} instead — after that it may charge ${money(c)}.`;
+        say = `${fmt(w.date)} is after your last safe day (${fmt(last)}). I'll remind you on ${fmt(last)} instead. After that it may charge ${money(c)}.`;
         log.push(`Rule: "${w.rule}" → ${w.date}, later than the last safe day → moved to ${last}.`);
       } else {
         c.user_date = w.date;
@@ -187,7 +187,7 @@ export function applyProof(c0, p) {
     return { contract: c, say: `Confirmed: ${p.reason} I've closed ${c.service} and stopped all reminders.`, log: ["AI read: proof verified, same service.", "Rule: verified proof closes the case."] };
   }
   const why = !p.service_matches ? "it doesn't look like it's about " + c.service : "it doesn't show the plan was cancelled";
-  return { contract: c, say: `I can't close it yet — ${why} (${p.reason}). Reminders stay on until I see proof.`, log: [`AI read: verified=${p.verified}, same service=${p.service_matches}.`, "Rule: no proof → keep chasing."] };
+  return { contract: c, say: `I can't close it yet: ${why} (${p.reason}). Reminders stay on until I see proof.`, log: [`AI read: verified=${p.verified}, same service=${p.service_matches}.`, "Rule: no proof → keep chasing."] };
 }
 
 // Move the clock forward one day; returns reminder messages that fire today.

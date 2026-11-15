@@ -1,4 +1,4 @@
-// Keiyaku Touban — API worker.
+// Contract Duty (契約当番) — API worker.
 // The language model only READS (emails, replies, proof). Every date and every
 // "stop chasing" decision is computed by deterministic code in public/agent.js.
 

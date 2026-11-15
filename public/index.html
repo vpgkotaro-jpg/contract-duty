@@ -3,72 +3,74 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Keiyaku Touban</title>
-<meta name="description" content="An AI agent that chases your subscription cancellation deadlines until you are actually done.">
+<title>Contract Duty</title>
+<meta name="description" content="Reminds you before a free trial turns into a charge, and keeps asking until you cancel or decide to keep it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
   <div class="brand">
-    <div class="logo" aria-hidden="true">当</div>
+    <div class="stamp" aria-hidden="true">当番</div>
     <div>
-      <h1>Keiyaku Touban</h1>
-      <p class="tag">The agent that chases your cancellation deadlines — and doesn't stop until you're actually done.</p>
+      <h1>Contract Duty <span class="jp">契約当番</span></h1>
+      <p class="tag">Reminds you before a free trial turns into a charge, and keeps asking until you cancel it or decide to keep it.</p>
     </div>
   </div>
-  <div class="clock">
-    <span class="label">Demo clock</span>
-    <strong id="today">—</strong>
-    <button id="nextDay" class="btn">Next day ▸</button>
-    <button id="jump" class="btn" title="Move the clock to the next day a reminder fires">Next reminder ⏭</button>
-    <button id="reset" class="btn ghost" title="Clear everything and start over">Reset</button>
+  <div class="clock" aria-label="Demo clock">
+    <span class="label">Demo date</span>
+    <strong id="today">-</strong>
+    <button id="nextDay" class="btn">Next day</button>
+    <button id="jump" class="btn" title="Move the date to the next day a reminder goes out">Skip to next reminder</button>
+    <button id="reset" class="btn plain" title="Clear everything and start over">Reset</button>
   </div>
 </header>
 
-<section class="roles" aria-label="Who decides what">
-  <div><b>AI reads</b><span>emails, your free-text replies, cancellation proof</span></div>
-  <div><b>Code decides dates</b><span>reminder schedule, last safe day, Apple's 24h rule</span></div>
-  <div><b>You decide</b><span>keep or cancel, and you press the cancel button</span></div>
-</section>
-
 <main class="grid">
-  <section class="card" id="inboxCard">
-    <h2>1 · Inbox</h2>
-    <p class="hint">Paste an email about a free trial or a renewal. Or try a sample (all fictional).</p>
+  <section class="panel inbox" id="inboxCard">
+    <h2>Inbox</h2>
+    <p class="hint">Paste an email about a free trial or a renewal, or load a sample (made-up services).</p>
     <div class="samples" id="samples"></div>
-    <textarea id="emailText" rows="9" placeholder="Paste the email text here…"></textarea>
-    <button id="readEmail" class="btn primary">Read with AI</button>
+    <textarea id="emailText" rows="9" placeholder="Paste the email here"></textarea>
+    <button id="readEmail" class="btn primary">Read email</button>
     <div id="emailResult"></div>
   </section>
 
-  <section class="card" id="ledgerCard">
-    <h2>2 · Ledger</h2>
-    <div id="ledger"><p class="empty">No contracts yet. Read an email to add one.</p></div>
+  <section class="panel ledger" id="ledgerCard">
+    <h2>Contracts</h2>
+    <div id="ledger"><p class="empty">Nothing yet. Read an email to add one.</p></div>
   </section>
 
-  <section class="card wide" id="threadCard">
-    <h2>3 · Conversation <span id="threadTitle" class="muted"></span></h2>
+  <section class="panel record" id="recordCard">
+    <h2>Your record</h2>
+    <div id="record"></div>
+  </section>
+
+  <section class="panel thread-panel" id="threadCard">
+    <h2>Conversation <span id="threadTitle" class="muted"></span></h2>
     <div class="threadWrap">
       <div>
-        <div id="thread" class="thread"><p class="empty">Pick a contract in the ledger.</p></div>
+        <div id="thread" class="thread"><p class="empty">Pick a contract.</p></div>
         <form id="replyForm" class="reply" hidden>
-          <input id="replyText" autocomplete="off" placeholder='Reply freely: "I&#39;ll do it this weekend", "keep it", "I cancelled"…'>
+          <input id="replyText" autocomplete="off" placeholder="Reply the way you'd text a friend">
           <button class="btn primary" id="replyBtn">Send</button>
         </form>
         <div class="quick" id="quick" hidden></div>
       </div>
       <aside>
-        <h3>Upcoming reminders</h3>
-        <ol id="upcoming" class="upcoming"><li class="empty">—</li></ol>
-        <h3>Agent log</h3>
-        <ul id="log" class="log"><li class="empty">—</li></ul>
+        <h3>Coming up</h3>
+        <ol id="upcoming" class="upcoming"><li class="empty">-</li></ol>
+        <h3>What it did, and why</h3>
+        <ul id="log" class="log"><li class="empty">-</li></ul>
       </aside>
     </div>
   </section>
 </main>
 
 <footer class="foot">
-  <p>Built for IceHacks 2026. Data stays in this browser (localStorage); the text you send to “Read with AI” goes to Cloudflare Workers AI and is not stored by this app. Don't paste card numbers or passwords. It never cancels anything for you.</p>
+  <p>Your contracts and replies stay in this browser. Text you send to be read goes to Cloudflare Workers AI and is not stored by this app. Don't paste card numbers or passwords. It never cancels anything for you. Made for IceHacks 2026.</p>
 </footer>
 <script type="module" src="app.js"></script>
 </body>

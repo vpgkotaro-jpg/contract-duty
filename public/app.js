@@ -71,11 +71,33 @@ const STATUS = {
   chasing: ["Chasing", "s-chase"],
   awaiting_proof: ["Waiting for proof", "s-proof"],
   keeping: ["Keeping", "s-keep"],
-  closed: ["Cancelled ✓", "s-done"],
-  missed: ["Missed — charged", "s-miss"],
+  closed: ["Cancelled", "s-done"],
+  missed: ["Charged", "s-miss"],
 };
+const WHY = {
+  closed: ["Why did you cancel?", ["Didn't use it enough", "Too expensive", "Only wanted the trial", "Found something else", "Other"]],
+  keeping: ["Why keep it?", ["I use it a lot", "Worth the price", "Need it for work or school", "Other"]],
+  missed: ["What happened?", ["Saw it and put it off", "Didn't see the reminder", "Couldn't find how to cancel", "Other"]],
+};
+const DONE = ["closed", "keeping", "missed"];
 const BILLED = { apple: "Apple", google_play: "Google Play", direct: "Direct", unknown: "Unknown" };
-const money = (c) => (c.price ? `${c.currency || ""} ${c.price}`.trim() : "—");
+const money = (c) => (c.price ? `${c.currency || ""} ${c.price}`.trim() : "-");
+const sumBy = (list) => {
+  const m = new Map();
+  list.forEach((c) => { if (c.price) m.set(c.currency || "", (m.get(c.currency || "") || 0) + c.price); });
+  return m.size ? [...m].map(([cur, n]) => `${cur} ${Math.round(n * 100) / 100}`.trim()).join(" + ") : "";
+};
+const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+
+// The record changes what the agent does next: if past contracts needed 2+ "later"s
+// or one slipped through, new contracts get their first reminder 3 days earlier.
+function habit() {
+  const done = S.contracts.filter((c) => DONE.includes(c.status));
+  if (!done.length) return null;
+  const avg = mean(done.map((c) => c.laters || 0));
+  const missed = done.filter((c) => c.status === "missed").length;
+  return avg >= 2 || missed ? { avg, missed, n: done.length } : null;
+}
 
 function renderClock() {
   $("#today").textContent = fmt(S.today) + ", " + S.today.slice(0, 4);
@@ -89,14 +111,14 @@ function renderPending() {
   const box = $("#emailResult");
   const p = S.pending;
   if (!p) { box.innerHTML = ""; return; }
-  if (p.error) { box.innerHTML = `<div class="note bad">AI couldn't read it: ${esc(p.error)}. Try again in a moment.</div>`; return; }
+  if (p.error) { box.innerHTML = `<div class="note bad">Couldn't read it (${esc(p.error)}). Try again in a moment.</div>`; return; }
   if (!p.is_contract || p.kind === "none") {
-    box.innerHTML = `<div class="note">Not a contract — ignored. <span class="muted">AI: ${esc(p.reason)}</span></div>`;
+    box.innerHTML = `<div class="note">Not a contract, so nothing was saved. <span class="muted">${esc(p.reason)}</span></div>`;
     return;
   }
   box.innerHTML = `
   <div class="read">
-    <div class="readHead">AI read this — check it before adding <span class="muted">(${esc(p.reason)})</span></div>
+    <div class="readHead">Check these before saving <span class="muted">${esc(p.reason)}</span></div>
     <div class="fields">
       <label>Service<input id="f_service" value="${esc(p.service)}"></label>
       <label>Ends / renews<input id="f_end" type="date" value="${esc(isDate(p.end_date) ? p.end_date : "")}"></label>
@@ -105,34 +127,64 @@ function renderPending() {
       <label>Kind<select id="f_kind">${["free_trial", "monthly", "yearly", "other"].map((k) => `<option ${k === p.kind ? "selected" : ""}>${k}</option>`).join("")}</select></label>
       <label>Billed by<select id="f_billed">${Object.keys(BILLED).map((k) => `<option value="${k}" ${k === p.billed_by ? "selected" : ""}>${BILLED[k]}</option>`).join("")}</select></label>
     </div>
-    ${p.billed_by === "apple" ? `<p class="hint">Billed by Apple → cancel in Apple's subscription screen, at least 24h before the end. Your last safe day becomes 2 days before.</p>` : ""}
-    <button id="addContract" class="btn primary">Add to ledger</button>
+    ${p.billed_by === "apple" ? `<p class="hint">Billed by Apple: you cancel in Apple's subscription screen, at least 24 hours before the end. So your last safe day is 2 days before.</p>` : ""}
+    <button id="addContract" class="btn primary">Save contract</button>
   </div>`;
 }
 
 function renderLedger() {
   const el = $("#ledger");
-  if (!S.contracts.length) { el.innerHTML = `<p class="empty">No contracts yet. Read an email to add one.</p>`; return; }
-  el.innerHTML = `<div class="rows">` + S.contracts.map((c) => {
+  if (!S.contracts.length) { el.innerHTML = `<p class="empty">Nothing yet. Read an email to add one.</p>`; return; }
+  el.innerHTML = `<table class="contracts"><thead><tr><th>Service</th><th>Ends</th><th>Last safe day</th><th>Status</th></tr></thead><tbody>` + S.contracts.map((c) => {
     const [st, cls] = STATUS[c.status] || [c.status, ""];
     const nx = schedule(c, S.today)[0];
-    return `<button class="row ${c.id === S.selected ? "sel" : ""}" data-id="${c.id}">
-      <span class="svc">${esc(c.service)}<small>${BILLED[c.billed_by] || ""} · ${esc(money(c))}</small></span>
-      <span class="dates"><small>ends</small>${fmt(c.end_date)}<small>last safe day ${fmt(lastSafeDay(c))}</small></span>
-      <span class="st ${cls}">${st}<small>${nx ? "next: " + fmt(nx.date) : ""}</small></span>
-    </button>`;
-  }).join("") + `</div>`;
+    return `<tr class="${c.id === S.selected ? "sel" : ""}" data-id="${c.id}" tabindex="0">
+      <td><span class="svc">${esc(c.service)}</span><small>${BILLED[c.billed_by] || ""} · ${esc(money(c))}</small></td>
+      <td class="d">${fmt(c.end_date)}</td>
+      <td class="d">${fmt(lastSafeDay(c))}</td>
+      <td><span class="st ${cls}">${st}</span><small>${nx ? "next " + fmt(nx.date) : ""}</small></td>
+    </tr>`;
+  }).join("") + `</tbody></table>`;
+}
+
+function renderRecord() {
+  const el = $("#record");
+  const done = S.contracts.filter((c) => DONE.includes(c.status));
+  const closed = S.contracts.filter((c) => c.status === "closed");
+  const open = S.contracts.filter((c) => ["chasing", "awaiting_proof"].includes(c.status));
+  const missed = S.contracts.filter((c) => c.status === "missed");
+  if (!S.contracts.length) {
+    el.innerHTML = `<p class="empty">Every decision is saved here: what you stopped, what got charged, how many times you said "later", and why. The agent uses this to start earlier with you next time.</p>`;
+    return;
+  }
+  const stat = (n, label, amt) => `<div><b>${n}</b><span>${label}</span>${amt ? `<em>${esc(amt)}</em>` : ""}</div>`;
+  const h = habit();
+  const facts = [];
+  if (done.length) facts.push(`Before deciding, you said "later" <b class="num">${mean(done.map((c) => c.laters || 0)).toFixed(1)}</b> times on average (${done.length} decided).`);
+  if (h) facts.push(`So new contracts now get their first reminder <b>3 days earlier</b>.`);
+  else if (done.length) facts.push(`You decide quickly, so reminders keep the normal timing.`);
+  const groups = Object.entries(WHY).map(([status, [q]]) => {
+    const tally = new Map();
+    S.contracts.filter((c) => c.status === status && c.why).forEach((c) => tally.set(c.why, (tally.get(c.why) || 0) + 1));
+    if (!tally.size) return "";
+    const max = Math.max(...tally.values());
+    return `<h3>${q}</h3><ul class="bars">${[...tally].sort((x, y) => y[1] - x[1]).map(([w, n]) => `<li><span>${esc(w)}</span><i style="width:${Math.round((n / max) * 100)}%"></i><span class="n">${n}</span></li>`).join("")}</ul>`;
+  }).join("");
+  el.innerHTML = `<div class="stats">${stat(closed.length, "stopped before a charge", sumBy(closed))}${stat(open.length, "still open", sumBy(open))}${stat(missed.length, "charged anyway", sumBy(missed))}</div>
+    ${facts.length ? `<ul class="facts">${facts.map((f) => `<li>${f}</li>`).join("")}</ul>` : ""}
+    ${groups}
+    <p class="small">Next step, not built yet: with your permission, only the reason and the type of service (never your name or email) would be pooled into anonymous statistics on why people quit subscriptions.</p>`;
 }
 
 function renderThread() {
   const c = S.contracts.find((x) => x.id === S.selected);
   const th = $("#thread"), form = $("#replyForm"), quick = $("#quick");
   if (!c) {
-    th.innerHTML = `<p class="empty">Pick a contract in the ledger.</p>`;
+    th.innerHTML = `<p class="empty">Pick a contract.</p>`;
     form.hidden = quick.hidden = true;
     $("#threadTitle").textContent = "";
-    $("#upcoming").innerHTML = `<li class="empty">—</li>`;
-    $("#log").innerHTML = `<li class="empty">—</li>`;
+    $("#upcoming").innerHTML = `<li class="empty">-</li>`;
+    $("#log").innerHTML = `<li class="empty">-</li>`;
     return;
   }
   $("#threadTitle").textContent = "· " + c.service;
@@ -140,24 +192,27 @@ function renderThread() {
   th.innerHTML = msgs.map((m) => `<div class="msg ${m.who}"><div class="bubble">${esc(m.text)}</div><div class="when">${fmt(m.date)}${m.tag ? " · " + esc(m.tag) : ""}</div></div>`).join("");
   th.scrollTop = th.scrollHeight;
   const open = !["keeping", "closed"].includes(c.status);
+  const ask = WHY[c.status] && !c.why ? WHY[c.status] : null;
   form.hidden = !open;
-  quick.hidden = !open;
+  quick.hidden = !open && !ask;
   const proof = c.status === "awaiting_proof";
-  $("#replyText").placeholder = proof ? "Paste the cancellation email or the subscription-screen text…" : `Reply freely: "I'll do it this weekend", "keep it", "I cancelled"…`;
+  $("#replyText").placeholder = proof ? "Paste the cancellation email or the text on the subscription screen" : "Reply the way you'd text a friend";
   $("#replyBtn").textContent = proof ? "Check proof" : "Send";
   const chips = proof
     ? [["Sample: cancellation email", `Subject: Your subscription has been cancelled\nYour ${c.service} subscription was cancelled. You can keep using it until ${long(c.end_date)}. You won't be charged again.`, "proof"],
        ["Sample: still-active screen", `${c.service}\nRenews ${long(c.end_date)}\n${money(c)}\nCancel Subscription`, "proof"],
        ["Actually, I'll keep it", "Actually, I'll keep it", "reply"]]
     : [["this weekend", "I'll deal with it this weekend", "reply"], ["not sure yet", "Hmm, not sure yet", "reply"], ["how do I cancel?", "How do I cancel this?", "reply"], ["next Monday", "I'll do it next Monday", "reply"], ["keep it", "I'll keep it, it's worth it", "reply"], ["I cancelled it", "I cancelled it already", "reply"]];
-  quick.innerHTML = chips.map(([l, t, k]) => `<button class="chip" data-t="${esc(t)}" data-k="${k}">${esc(l)}</button>`).join("");
+  quick.innerHTML = ask
+    ? `<p class="q">${ask[0]} (saved to your record)</p>` + ask[1].map((w) => `<button class="chip" data-t="${esc(w)}" data-k="why">${esc(w)}</button>`).join("")
+    : chips.map(([l, t, k]) => `<button class="chip" data-t="${esc(t)}" data-k="${k}">${esc(l)}</button>`).join("");
   const up = schedule(c, S.today);
-  $("#upcoming").innerHTML = up.length ? up.map((u) => `<li><b>${fmt(u.date)}</b><span>${esc(u.why)}</span></li>`).join("") : `<li class="empty">No reminders${c.status === "closed" ? " — case closed" : c.status === "keeping" ? " — you're keeping it" : ""}.</li>`;
+  $("#upcoming").innerHTML = up.length ? up.map((u) => `<li><b>${fmt(u.date)}</b><span>${esc(u.why)}</span></li>`).join("") : `<li class="empty">No more reminders${c.status === "closed" ? ". Case closed" : c.status === "keeping" ? ". You're keeping it" : ""}.</li>`;
   const lg = S.logs[c.id] || [];
-  $("#log").innerHTML = lg.length ? lg.slice().reverse().map((l) => `<li><span class="muted">${fmt(l.date)}</span> ${esc(l.text)}</li>`).join("") : `<li class="empty">—</li>`;
+  $("#log").innerHTML = lg.length ? lg.slice().reverse().map((l) => `<li><span class="muted">${fmt(l.date)}</span> ${esc(l.text)}</li>`).join("") : `<li class="empty">-</li>`;
 }
 
-function render() { renderClock(); renderPending(); renderLedger(); renderThread(); save(); }
+function render() { renderClock(); renderPending(); renderLedger(); renderRecord(); renderThread(); save(); }
 
 const say = (id, who, text, tag) => { (S.threads[id] ||= []).push({ who, text, date: S.today, tag }); };
 const log = (id, lines) => { (S.logs[id] ||= []).push(...lines.map((text) => ({ text, date: S.today }))); };
@@ -171,20 +226,20 @@ $("#samples").addEventListener("click", (e) => {
 
 $("#readEmail").addEventListener("click", async () => {
   const text = $("#emailText").value.trim(); if (!text) return;
-  const btn = $("#readEmail"); busy(btn, true, "Read with AI");
+  const btn = $("#readEmail"); busy(btn, true, "Read email");
   S.pending = null; renderPending();
   try {
     S.pending = await api("/api/read-email", { text, today: S.today });
     if (S.pending.trial_days > 0 && /free trial|trial ends|trial period/i.test(text) && S.pending.kind !== "none") S.pending.kind = "free_trial";
   }
   catch (e) { S.pending = { error: e.message }; }
-  busy(btn, false, "Read with AI"); render();
+  busy(btn, false, "Read email"); render();
 });
 
 $("#emailResult").addEventListener("click", (e) => {
   if (e.target.id !== "addContract") return;
   const end = $("#f_end").value;
-  if (!isDate(end)) { alertBox("Set the end / renewal date first — the email didn't say it clearly."); return; }
+  if (!isDate(end)) { alertBox("Set the end or renewal date first. The email didn't say it clearly."); return; }
   if (end <= S.today) { alertBox("That date is today or in the past."); return; }
   const c = {
     id: "c" + Date.now().toString(36),
@@ -201,17 +256,28 @@ $("#emailResult").addEventListener("click", (e) => {
     user_date: null, last_nudge: null, replied_since: true,
   };
   c.first_date = firstReminder(c, S.today);
+  const h = habit();
+  const habitLog = [];
+  if (h) {
+    const min = addDays(S.today, 1), earlier = addDays(c.first_date, -3);
+    const nd = earlier < min ? min : earlier;
+    if (nd < c.first_date) {
+      c.first_note = `3 days earlier than usual, because ${h.missed ? "a charge slipped through before" : `you said "later" ${h.avg.toFixed(1)} times on average`}`;
+      habitLog.push(`Your record: ${h.missed ? `${h.missed} missed` : `avg ${h.avg.toFixed(1)} "later"s`} over ${h.n} decided → first reminder ${c.first_date} moved to ${nd}.`);
+      c.first_date = nd;
+    }
+  }
   S.contracts.push(c);
   S.selected = c.id;
   const steps = cancelSteps(c);
   say(c.id, "agent", `Added ${c.service}. It ends ${fmt(c.end_date)}; your last safe day to cancel is ${fmt(lastSafeDay(c))}. If you stop it, it's in ${steps.where}. First reminder: ${fmt(c.first_date)}. You can reply anytime.`, "added");
-  log(c.id, [`AI read the email: ${S.pending.reason}`, `Rule: first reminder ${fmt(c.first_date)}; last safe day ${fmt(lastSafeDay(c))}${c.billed_by === "apple" ? " (Apple: 24h before → 2 days)" : ""}.`]);
+  log(c.id, [`AI read the email: ${S.pending.reason}`, `Rule: first reminder ${fmt(c.first_date)}; last safe day ${fmt(lastSafeDay(c))}${c.billed_by === "apple" ? " (Apple: 24h before → 2 days)" : ""}.`, ...habitLog]);
   S.pending = null; $("#emailText").value = "";
   render();
 });
 
 $("#ledger").addEventListener("click", (e) => {
-  const r = e.target.closest(".row"); if (!r) return;
+  const r = e.target.closest("tr[data-id]"); if (!r) return;
   S.selected = r.dataset.id; render();
 });
 
@@ -232,10 +298,11 @@ async function handleSend(text, forceKind) {
       try { r = await api("/api/read-reply", { text, today: S.today, weekday: weekdayName(S.today), contract: c }); }
       catch { r = fallbackReply(text); tag = "offline rules"; }
       const out = applyReply(c, r, S.today);
-      replace(out.contract); say(c.id, "agent", out.say, tag); log(c.id, out.log.concat(r.fallback ? ["(AI unreachable — used offline keyword rules)"] : []));
+      if (["cancel_later", "undecided"].includes(r.intent)) out.contract.laters = (c.laters || 0) + 1;
+      replace(out.contract); say(c.id, "agent", out.say, tag); log(c.id, out.log.concat(r.fallback ? ["(AI unreachable, so offline keyword rules were used)"] : []));
     }
   } catch (e) {
-    say(c.id, "agent", `I couldn't check that right now (${e.message}). Reminders stay on; try again.`, "error");
+    say(c.id, "agent", `I couldn't check that right now (${e.message}). Reminders stay on, so try again.`, "error");
   }
   btn.disabled = false; render();
 }
@@ -248,6 +315,15 @@ $("#replyForm").addEventListener("submit", (e) => {
 });
 $("#quick").addEventListener("click", (e) => {
   const b = e.target.closest(".chip"); if (!b) return;
+  if (b.dataset.k === "why") {
+    const c = S.contracts.find((x) => x.id === S.selected); if (!c) return;
+    replace({ ...c, why: b.dataset.t });
+    say(c.id, "me", b.dataset.t);
+    say(c.id, "agent", "Thanks, saved to your record.");
+    log(c.id, [`Record: ${c.status} because "${b.dataset.t}" (${c.laters || 0} "later"s before deciding).`]);
+    render();
+    return;
+  }
   handleSend(b.dataset.t, b.dataset.k);
 });
 
