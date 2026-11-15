@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keiyaku Touban</title>
+<meta name="description" content="An AI agent that chases your subscription cancellation deadlines until you are actually done.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="logo" aria-hidden="true">当</div>
+    <div>
+      <h1>Keiyaku Touban</h1>
+      <p class="tag">The agent that chases your cancellation deadlines — and doesn't stop until you're actually done.</p>
+    </div>
+  </div>
+  <div class="clock">
+    <span class="label">Demo clock</span>
+    <strong id="today">—</strong>
+    <button id="nextDay" class="btn">Next day ▸</button>
+    <button id="jump" class="btn" title="Move the clock to the next day a reminder fires">Next reminder ⏭</button>
+    <button id="reset" class="btn ghost" title="Clear everything and start over">Reset</button>
+  </div>
+</header>
+
+<section class="roles" aria-label="Who decides what">
+  <div><b>AI reads</b><span>emails, your free-text replies, cancellation proof</span></div>
+  <div><b>Code decides dates</b><span>reminder schedule, last safe day, Apple's 24h rule</span></div>
+  <div><b>You decide</b><span>keep or cancel, and you press the cancel button</span></div>
+</section>
+
+<main class="grid">
+  <section class="card" id="inboxCard">
+    <h2>1 · Inbox</h2>
+    <p class="hint">Paste an email about a free trial or a renewal. Or try a sample (all fictional).</p>
+    <div class="samples" id="samples"></div>
+    <textarea id="emailText" rows="9" placeholder="Paste the email text here…"></textarea>
+    <button id="readEmail" class="btn primary">Read with AI</button>
+    <div id="emailResult"></div>
+  </section>
+
+  <section class="card" id="ledgerCard">
+    <h2>2 · Ledger</h2>
+    <div id="ledger"><p class="empty">No contracts yet. Read an email to add one.</p></div>
+  </section>
+
+  <section class="card wide" id="threadCard">
+    <h2>3 · Conversation <span id="threadTitle" class="muted"></span></h2>
+    <div class="threadWrap">
+      <div>
+        <div id="thread" class="thread"><p class="empty">Pick a contract in the ledger.</p></div>
+        <form id="replyForm" class="reply" hidden>
+          <input id="replyText" autocomplete="off" placeholder='Reply freely: "I&#39;ll do it this weekend", "keep it", "I cancelled"…'>
+          <button class="btn primary" id="replyBtn">Send</button>
+        </form>
+        <div class="quick" id="quick" hidden></div>
+      </div>
+      <aside>
+        <h3>Upcoming reminders</h3>
+        <ol id="upcoming" class="upcoming"><li class="empty">—</li></ol>
+        <h3>Agent log</h3>
+        <ul id="log" class="log"><li class="empty">—</li></ul>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>Built for IceHacks 2026. Data stays in this browser (localStorage); the text you send to “Read with AI” goes to Cloudflare Workers AI and is not stored by this app. Don't paste card numbers or passwords. It never cancels anything for you.</p>
+</footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>
